@@ -126,3 +126,30 @@ export interface Comprovante {
   created_by?: string;
   created_at: string;
 }
+
+// =====================================================
+// Aliases de compatibilidade com o Lugo original
+// =====================================================
+
+/** Alias de Imovel para compatibilidade com componentes do Lugo */
+export type Property = Imovel & {
+  // campos extras usados nos componentes de detalhe público
+  titulo?: string;
+  preco?: number;
+  proprietario_id?: string;
+};
+
+export interface HistoricalTenant {
+  id: string;
+  imovel_id: string;
+  nome_completo: string;
+  cpf?: string;
+  cnpj?: string;
+  telefone: string;
+  email?: string;
+  data_inicio: string;
+  data_fim?: string;
+  valor_aluguel: number;
+  status: 'ativo' | 'inativo';
+  created_at: string;
+}
