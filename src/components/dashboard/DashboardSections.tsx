@@ -175,66 +175,57 @@ export async function AlertsSection({ userId }: { userId: string }) {
     const [tenantsRes, receiptsRes] = await Promise.all([
         supabase
             .from('inquilinos')
-            .select('id, nome_completo, dia_vencimento, valor_aluguel, data_inicio, imoveis!inner (endereco_rua, endereco_numero, titulo, proprietario_id)')
+            .select('id, nome_completo, dia_vencimento, valor_aluguel, multa_percentual, juros_percentual, data_inicio, imoveis!inner (endereco_rua, endereco_numero, titulo, proprietario_id)')
             .eq('status', 'ativo')
             .eq('imoveis.proprietario_id', userId),
         supabase
             .from('comprovantes')
-            .select('inquilino_id, imoveis!inner(proprietario_id)')
+            .select('inquilino_id, situation, imoveis!inner(proprietario_id)')
             .eq('tipo', 'pagamento')
             .eq('imoveis.proprietario_id', userId)
             .gte('mes_referencia', currentMonthStart)
     ]);
 
-    const receivedInquilinoIds = new Set(receiptsRes.data?.map((r: any) => r.inquilino_id) || []);
+    // Apenas 'billed' = pago. 'open' e 'expired' continuam aparecendo nos alertas
+    const paidInquilinoIds = new Set(
+        receiptsRes.data?.filter((r: any) => r.situation === 'billed').map((r: any) => r.inquilino_id) || []
+    );
     const alerts: any[] = [];
 
     tenantsRes.data?.forEach((tenant: any) => {
-        if (receivedInquilinoIds.has(tenant.id)) return;
+        if (paidInquilinoIds.has(tenant.id)) return; // pago = sem alerta
+
         const dueDay = tenant.dia_vencimento;
         const property = Array.isArray(tenant.imoveis) ? tenant.imoveis[0] : tenant.imoveis;
         const propertyName = property?.titulo || (property ? `${property.endereco_rua}, ${property.endereco_numero}` : 'Imóvel');
 
-        // Calcular o primeiro vencimento válido baseado na data de início do contrato
-        const contractStartDate = tenant.data_inicio ? new Date(tenant.data_inicio) : null;
-        
+        // Calcular dias em atraso
+        const venc = new Date(currentYear, currentMonth, dueDay);
+        const diasAtraso = Math.max(0, Math.floor((now.getTime() - venc.getTime()) / 86400000));
+        const multa = diasAtraso > 0 ? tenant.valor_aluguel * ((tenant.multa_percentual || 10) / 100) : 0;
+        const juros = diasAtraso > 0 ? tenant.valor_aluguel * ((tenant.juros_percentual || 1) / 100 / 30) * diasAtraso : 0;
+        const totalComEncargos = tenant.valor_aluguel + multa + juros;
+
+        const contractStartDate = tenant.data_inicio ? new Date(tenant.data_inicio + 'T12:00:00') : null;
         if (contractStartDate) {
-            const contractStartDay = contractStartDate.getDate();
-            const contractStartMonth = contractStartDate.getMonth();
-            const contractStartYear = contractStartDate.getFullYear();
-            
-            // Se o contrato começou depois do dia de vencimento no mês de início,
-            // o primeiro vencimento é no próximo mês
-            let firstDueMonth = contractStartMonth;
-            let firstDueYear = contractStartYear;
-            
-            if (contractStartDay > dueDay) {
-                firstDueMonth += 1;
-                if (firstDueMonth > 11) {
-                    firstDueMonth = 0;
-                    firstDueYear += 1;
-                }
-            }
-            
-            // Se ainda não chegou o primeiro vencimento, não mostrar alerta
-            if (currentYear < firstDueYear || 
-                (currentYear === firstDueYear && currentMonth < firstDueMonth)) {
-                return;
-            }
-            
-            // Se estamos no mês do primeiro vencimento mas ainda não passou o dia
-            if (currentYear === firstDueYear && 
-                currentMonth === firstDueMonth && 
-                today < dueDay) {
-                return;
-            }
+            const firstDueMonth = contractStartDate.getDate() > dueDay
+                ? contractStartDate.getMonth() + 1
+                : contractStartDate.getMonth();
+            const firstDueYear = firstDueMonth > 11 ? contractStartDate.getFullYear() + 1 : contractStartDate.getFullYear();
+            const normalizedFirstDueMonth = firstDueMonth > 11 ? 0 : firstDueMonth;
+            if (currentYear < firstDueYear || (currentYear === firstDueYear && currentMonth < normalizedFirstDueMonth)) return;
+        }
+
+        // Vencido: dueDay já passou
+        if (diasAtraso > 0) {
         }
 
         // Lógica original de alertas
         if (dueDay < today) {
-            alerts.push({ id: `overdue-${tenant.id}`, tenantName: tenant.nome_completo, propertyName, dueDate: dueDay, type: 'overdue', amount: tenant.valor_aluguel });
-        } else if (dueDay <= today + 5) {
-            alerts.push({ id: `upcoming-${tenant.id}`, tenantName: tenant.nome_completo, propertyName, dueDate: dueDay, type: 'upcoming', amount: tenant.valor_aluguel });
+            alerts.push({ id: `overdue-${tenant.id}`, tenantName: tenant.nome_completo, propertyName, dueDate: dueDay, type: 'overdue', amount: totalComEncargos, diasAtraso });
+        } else {
+            // Em aberto — sempre mostrar se não pago
+            alerts.push({ id: `upcoming-${tenant.id}`, tenantName: tenant.nome_completo, propertyName, dueDate: dueDay, type: 'upcoming', amount: tenant.valor_aluguel, diasAtraso: 0 });
         }
     });
 
