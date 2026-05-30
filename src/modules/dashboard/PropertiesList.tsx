@@ -171,13 +171,6 @@ export default function PropertiesList({ initialData = [], initialLoading = true
     });
   }, []);
 
-  const handleShareCatalog = useCallback(() => {
-    if (!user) return;
-    navigator.clipboard.writeText(url);
-      description: "Compartilhe todos os seus imóveis disponíveis.",
-    });
-  }, [user]);
-
   const handleDelete = useCallback(async () => {
     if (!deleteId) return;
 
@@ -316,7 +309,6 @@ export default function PropertiesList({ initialData = [], initialLoading = true
             <Button
               variant="outline"
               size="lg"
-              onClick={handleShareCatalog}
               className="w-full sm:w-auto gap-2 border-tertiary text-tertiary hover:bg-primary/5 hover:text-tertiary"
             >
               <Share2 className="h-4 w-4" />
