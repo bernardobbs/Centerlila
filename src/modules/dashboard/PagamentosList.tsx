@@ -120,6 +120,23 @@ export default function PagamentosList({ initialInquilinos, initialComprovantes,
     setComprovantes(data || []);
   }, [userId]);
 
+  /* lançar parcela em aberto para o mês */
+  const lancarEmAberto = async (inq: Inquilino, mes: string) => {
+    try {
+      const venc = new Date(mes);
+      venc.setDate(inq.dia_vencimento);
+      const { error } = await supabase.from("comprovantes").insert({
+        inquilino_id: inq.id, imovel_id: inq.imovel_id,
+        tipo: "pagamento", mes_referencia: mes,
+        valor: inq.valor_aluguel, situation: "open",
+        data_vencimento: venc.toISOString().split("T")[0],
+      });
+      if (error) throw error;
+      toast.success("Lançado em aberto", { description: `${inq.nome_completo} · ${mesLabel(mes)}` });
+      recarregar();
+    } catch { toast.error("Erro ao lançar parcela"); }
+  };
+
   /* comprovante do mês por inquilino */
   function compDoMes(inqId: string, mes: string) {
     return comprovantes.find(c => c.inquilino_id === inqId && c.mes_referencia.startsWith(mes.slice(0,7)));
@@ -193,10 +210,21 @@ export default function PagamentosList({ initialInquilinos, initialComprovantes,
 
           {/* controles */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 border rounded-md px-3 py-1.5">
-              <button onClick={() => navMes(-1)} className="text-muted-foreground hover:text-foreground"><ChevronLeft className="h-4 w-4" /></button>
-              <span className="text-sm font-medium w-32 text-center">{m} / {y}</span>
-              <button onClick={() => navMes(1)} className="text-muted-foreground hover:text-foreground"><ChevronRight className="h-4 w-4" /></button>
+            <div className="flex items-center gap-1 border rounded-md px-2 py-1">
+              <button onClick={() => navMes(-1)} className="text-muted-foreground hover:text-foreground p-1"><ChevronLeft className="h-4 w-4" /></button>
+              <select
+                value={mesAtual}
+                onChange={e => setMesAtual(e.target.value)}
+                className="text-sm font-medium bg-transparent border-none outline-none cursor-pointer px-1"
+              >
+                {Array.from({ length: 24 }, (_, i) => {
+                  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 12 + i);
+                  const val = toISOMonth(d);
+                  const lbl = `${MESES_SHORT[d.getMonth()]}/${d.getFullYear()}`;
+                  return <option key={val} value={val}>{lbl}</option>;
+                })}
+              </select>
+              <button onClick={() => navMes(1)} className="text-muted-foreground hover:text-foreground p-1"><ChevronRight className="h-4 w-4" /></button>
             </div>
             <div className="flex gap-1.5">
               {(["todos","open","expired","billed"] as const).map(f => (
@@ -249,7 +277,14 @@ export default function PagamentosList({ initialInquilinos, initialComprovantes,
                                 </Button>
                               </a>
                             )}
-                            <Button size="sm" onClick={() => abrirModal(inq, comp, mesAtual)}>Registrar pagamento</Button>
+                            {!comp && (
+                              <Button size="sm" variant="outline" onClick={() => lancarEmAberto(inq, mesAtual)}>
+                                + Em aberto
+                              </Button>
+                            )}
+                            <Button size="sm" onClick={() => abrirModal(inq, comp, mesAtual)}>
+                              {comp ? "Registrar pagamento" : "Registrar pagamento"}
+                            </Button>
                           </>
                         )}
                         {sit === "billed" && comp?.pdf_url && (
