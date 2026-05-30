@@ -19,7 +19,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight
-} from "lucide-react";
+, DollarSign } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,7 @@ const menuItems = [
   { icon: Home, label: "Painel", href: "/dashboard" },
   { icon: Building2, label: "Imóveis", href: "/dashboard/imoveis" },
   { icon: Users, label: "Inquilinos", href: "/dashboard/inquilinos" },
+  { icon: DollarSign, label: "Pagamentos", href: "/dashboard/pagamentos" },
   { icon: Receipt, label: "Comprovantes", href: "/dashboard/comprovantes" },
   { icon: Settings, label: "Configurações", href: "/dashboard/configuracoes" },
 ];
